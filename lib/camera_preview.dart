@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:real_time_face_detection/app_config.dart';
 import 'package:real_time_face_detection/main.dart';
 import 'package:real_time_face_detection/screen_model.dart';
 
@@ -38,11 +40,21 @@ class _CamerapreviewState extends State<Camerapreview> {
   double zoomLevel = 0.0, minZoomLevel = 0.0, maxZoomLevel = 0.0;
   final bool _allowPicker = true;
   bool _chagingCameraLens = false;
+  bool _isProcessing = false;
+  FaceDetector? _faceDetector;
 
   @override
   void initState() {
     super.initState();
     _picker = ImagePicker();
+    _faceDetector = FaceDetector(
+      options: FaceDetectorOptions(
+        enableClassification: true,
+        enableLandmarks: true,
+        enableTracking: true,
+        minFaceSize: 0.15,
+      ),
+    );
     if (cameras.any(
       (element) =>
           element.lensDirection == widget.cameraLensDirection &&
@@ -63,6 +75,12 @@ class _CamerapreviewState extends State<Camerapreview> {
       );
     }
     _startLive();
+  }
+
+  @override
+  void dispose() {
+    _faceDetector?.close();
+    super.dispose();
   }
 
   Future<void> _startLive() async {
@@ -90,38 +108,47 @@ class _CamerapreviewState extends State<Camerapreview> {
     });
   }
 
-  /// Detect faces in the camera image
-  Future<void> _processCameraImage(final CameraImage image) async {
-    final WriteBuffer allBytes = WriteBuffer();
-    for (final Plane plane in image.planes) {
-      allBytes.putUint8List(plane.bytes);
+  void _processCameraImage(final CameraImage image) async {
+    if (_isProcessing) return;
+    _isProcessing = true;
+    try {
+      final WriteBuffer allBytes = WriteBuffer();
+      for (final Plane plane in image.planes) {
+        allBytes.putUint8List(plane.bytes);
+      }
+      final bytes = allBytes.done().buffer.asUint8List();
+      final Size imageSize = Size(
+        image.width.toDouble(),
+        image.height.toDouble(),
+      );
+      final camera = cameras[_cameraIndex];
+      final imageRotation =
+          InputImageRotationValue.fromRawValue(camera.sensorOrientation) ??
+          InputImageRotation.rotation0deg;
+      final inputImageFormat =
+          InputImageFormatValue.fromRawValue(image.format.raw) ??
+          InputImageFormat.nv21;
+      final inputImage = InputImage.fromBytes(
+        bytes: bytes,
+        metadata: InputImageMetadata(
+          size: imageSize,
+          rotation: imageRotation,
+          format: inputImageFormat,
+          bytesPerRow: image.planes[0].bytesPerRow,
+        ),
+      );
+      // Nhận diện khuôn mặt trên main isolate
+      final faces = await _faceDetector!.processImage(inputImage);
+      if (faces.isNotEmpty) {
+        app_config.printLog("i", "Detected \\${faces.length} faces");
+      }
+      // Gọi callback nếu cần
+      widget.onImage(inputImage);
+    } catch (e) {
+      app_config.printLog("e", "Error processing image: $e");
+    } finally {
+      _isProcessing = false;
     }
-    final bytes = allBytes.done().buffer.asUint8List();
-    final Size imageSize = Size(
-      image.width.toDouble(),
-      image.height.toDouble(),
-    );
-    final camera = cameras[_cameraIndex];
-    final imageRotation =
-        InputImageRotationValue.fromRawValue(camera.sensorOrientation) ??
-        InputImageRotation.rotation0deg;
-    final inputImageFormat =
-        InputImageFormatValue.fromRawValue(image.format.raw) ??
-        InputImageFormat.nv21;
-
-    // Create input image with metadata
-    final inputImage = InputImage.fromBytes(
-      bytes: bytes,
-      metadata: InputImageMetadata(
-        size: imageSize,
-        rotation: imageRotation,
-        format: inputImageFormat,
-        bytesPerRow: image.planes[0].bytesPerRow,
-      ),
-    );
-
-    // Process the image
-    widget.onImage(inputImage);
   }
 
   @override
