@@ -1,0 +1,1 @@
+enum ScreenModel { live, gallery }
