@@ -69,8 +69,9 @@ class _CamerapreviewState extends State<Camerapreview> {
     final camera = cameras[_cameraIndex];
     _controller = CameraController(
       camera,
-      ResolutionPreset.high,
+      ResolutionPreset.medium,
       enableAudio: false,
+      imageFormatGroup: ImageFormatGroup.yuv420,
     );
     _controller?.initialize().then((_) {
       if (!mounted) {
@@ -107,12 +108,8 @@ class _CamerapreviewState extends State<Camerapreview> {
     final inputImageFormat =
         InputImageFormatValue.fromRawValue(image.format.raw) ??
         InputImageFormat.nv21;
-    // final planeData = image.planes.map((final Plane plane) {
-    //   return InputImagePlaneMetadata(
-    //     bytesPerRow: plane.bytesPerRow,
-    //
-    //   );
-    // });
+
+    // Create input image with metadata
     final inputImage = InputImage.fromBytes(
       bytes: bytes,
       metadata: InputImageMetadata(
@@ -123,6 +120,7 @@ class _CamerapreviewState extends State<Camerapreview> {
       ),
     );
 
+    // Process the image
     widget.onImage(inputImage);
   }
 
