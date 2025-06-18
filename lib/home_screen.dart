@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:real_time_face_detection/face_detector_screen.dart';
+
+import 'checkinface/face_detector_screen2.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,7 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const FaceDetectorScreen(),
+                  builder: (context) => const FaceDetectorScreen2(),
                 ),
               );
             },

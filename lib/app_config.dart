@@ -10,7 +10,7 @@ class AppConfig {
       // Number of method calls to be displayed
       errorMethodCount: 8,
       // Number of method calls if stacktrace is provided
-      lineLength: 1000,
+      lineLength: 120,
       // Width of the output
       colors: true,
       // Colorful log messages
@@ -18,6 +18,7 @@ class AppConfig {
     ), // Use the PrettyPrinter to format and print log
     output: null, // Use the default LogOutput (-> send everything to console)
   );
+
 
   void printLog(String type, String txt) {
     if (isDev) {
