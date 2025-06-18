@@ -17,9 +17,9 @@ class _FaceDetectorScreenState extends State<FaceDetectorScreen> {
   final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
       enableClassification: true,
-      // enableLandmarks: true,
+      enableLandmarks: true,
       enableContours: true,
-      // enableTracking: true,
+      enableTracking: true,
     ),
   );
 
@@ -50,6 +50,7 @@ class _FaceDetectorScreenState extends State<FaceDetectorScreen> {
         _text = '';
       });
       final faces = await _faceDetector.processImage(inputImage);
+      app_config.printLog("i", 'Face ${faces}');
       if (faces.isNotEmpty) {
         app_config.printLog("i", 'Detected ${faces.length} face(s):');
         for (var i = 0; i < faces.length; i++) {

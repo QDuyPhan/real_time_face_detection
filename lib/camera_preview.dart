@@ -102,9 +102,29 @@ class _CamerapreviewState extends State<Camerapreview> {
       image.height.toDouble(),
     );
     final camera = cameras[_cameraIndex];
-    final imageRotation =
-        InputImageRotationValue.fromRawValue(camera.sensorOrientation) ??
-        InputImageRotation.rotation0deg;
+
+    // final imageRotation =
+    //     InputImageRotationValue.fromRawValue(camera.sensorOrientation) ??
+    //     InputImageRotation.rotation0deg;
+
+    InputImageRotation imageRotation;
+    switch (_controller!.description.sensorOrientation) {
+      case 0:
+        imageRotation = InputImageRotation.rotation0deg;
+        break;
+      case 90:
+        imageRotation = InputImageRotation.rotation90deg;
+        break;
+      case 180:
+        imageRotation = InputImageRotation.rotation180deg;
+        break;
+      case 270:
+        imageRotation = InputImageRotation.rotation270deg;
+        break;
+      default:
+        imageRotation = InputImageRotation.rotation0deg;
+    }
+
     final inputImageFormat =
         InputImageFormatValue.fromRawValue(image.format.raw) ??
         InputImageFormat.nv21;
