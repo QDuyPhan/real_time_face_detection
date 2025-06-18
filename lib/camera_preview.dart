@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
@@ -80,6 +79,7 @@ class _CamerapreviewState extends State<Camerapreview> {
   @override
   void dispose() {
     _faceDetector?.close();
+    _stopLive();
     super.dispose();
   }
 
@@ -108,40 +108,119 @@ class _CamerapreviewState extends State<Camerapreview> {
     });
   }
 
+  Uint8List convertYUV420ToNV21Safe(CameraImage image) {
+    final int width = image.width;
+    final int height = image.height;
+
+    final int ySize = width * height;
+    final int uvSize = width * height ~/ 2;
+    final Uint8List nv21 = Uint8List(ySize + uvSize);
+
+    final Uint8List yPlane = image.planes[0].bytes;
+    final Uint8List uPlane = image.planes[1].bytes;
+    final Uint8List vPlane = image.planes[2].bytes;
+
+    final int yRowStride = image.planes[0].bytesPerRow;
+
+    // Copy Y plane
+    int destIndex = 0;
+    for (int row = 0; row < height; row++) {
+      final int srcIndex = row * yRowStride;
+      nv21.setRange(destIndex, destIndex + width, yPlane, srcIndex);
+      destIndex += width;
+    }
+
+    final int uvRowStride = image.planes[1].bytesPerRow;
+    final int uvPixelStride = image.planes[1].bytesPerPixel!;
+
+    // Interleave V and U planes to NV21 format (VU VU VU...)
+    int uvStartIndex = ySize;
+    for (int row = 0; row < height ~/ 2; row++) {
+      for (int col = 0; col < width ~/ 2; col++) {
+        final int uvIndex = row * uvRowStride + col * uvPixelStride;
+        nv21[uvStartIndex++] = vPlane[uvIndex]; // V
+        nv21[uvStartIndex++] = uPlane[uvIndex]; // U
+      }
+    }
+
+    return nv21;
+  }
+
   void _processCameraImage(final CameraImage image) async {
     if (_isProcessing) return;
     _isProcessing = true;
     try {
-      final WriteBuffer allBytes = WriteBuffer();
-      for (final Plane plane in image.planes) {
-        allBytes.putUint8List(plane.bytes);
+      if (image.format.group != ImageFormatGroup.yuv420) {
+        app_config.printLog('e', 'WARNING: CameraImage format is not yuv420!');
+        return;
       }
-      final bytes = allBytes.done().buffer.asUint8List();
-      final Size imageSize = Size(
-        image.width.toDouble(),
-        image.height.toDouble(),
-      );
-      final camera = cameras[_cameraIndex];
-      final imageRotation =
-          InputImageRotationValue.fromRawValue(camera.sensorOrientation) ??
-          InputImageRotation.rotation0deg;
+
+      final nv21 = convertYUV420ToNV21Safe(image);
+
+      InputImageRotation rotation;
+      switch (_controller!.description.sensorOrientation) {
+        case 0:
+          rotation = InputImageRotation.rotation0deg;
+          break;
+        case 90:
+          rotation = InputImageRotation.rotation90deg;
+          break;
+        case 180:
+          rotation = InputImageRotation.rotation180deg;
+          break;
+        case 270:
+          rotation = InputImageRotation.rotation270deg;
+          break;
+        default:
+          rotation = InputImageRotation.rotation0deg;
+      }
+
       final inputImageFormat =
           InputImageFormatValue.fromRawValue(image.format.raw) ??
           InputImageFormat.nv21;
+
       final inputImage = InputImage.fromBytes(
-        bytes: bytes,
+        bytes: nv21,
         metadata: InputImageMetadata(
-          size: imageSize,
-          rotation: imageRotation,
+          size: Size(image.width.toDouble(), image.height.toDouble()),
+          rotation: rotation,
           format: inputImageFormat,
           bytesPerRow: image.planes[0].bytesPerRow,
         ),
       );
+
       // Nhận diện khuôn mặt trên main isolate
       final faces = await _faceDetector!.processImage(inputImage);
+
       if (faces.isNotEmpty) {
-        app_config.printLog("i", "Detected \\${faces.length} faces");
+        app_config.printLog("i", 'Detected ${faces.length} face(s):');
+        for (var i = 0; i < faces.length; i++) {
+          final face = faces[i];
+          app_config.printLog("i", 'Face $i:');
+          app_config.printLog("i", '  Bounding box: ${face.boundingBox}');
+          app_config.printLog(
+            "i",
+            '  Head Euler Angle X: ${face.headEulerAngleX}',
+          );
+          app_config.printLog(
+            "i",
+            '  Head Euler Angle Y: ${face.headEulerAngleY}',
+          );
+          app_config.printLog(
+            "i",
+            '  Head Euler Angle Z: ${face.headEulerAngleZ}',
+          );
+          if (face.contours.isNotEmpty) {
+            app_config.printLog(
+              "i",
+              '  Contours detected: ${face.contours.keys.length} types',
+            );
+          }
+        }
+      } else {
+        app_config.printLog("i", 'No faces detected.');
       }
+
       // Gọi callback nếu cần
       widget.onImage(inputImage);
     } catch (e) {
