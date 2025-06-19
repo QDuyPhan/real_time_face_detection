@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:real_time_face_detection/face_detect_controller.dart';
 
 import 'home_screen.dart';
 // import 'package:real_time_face_detection/screens/home_screen.dart';
@@ -21,11 +23,14 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Face Detection',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
-      home: const HomeScreen(),
+    return ChangeNotifierProvider(
+      create: (context) => FaceDetectController(),
+      child: MaterialApp(
+        title: 'Face Detection',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+        home: const HomeScreen(),
+      ),
     );
   }
 }
