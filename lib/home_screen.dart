@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'checkinface/face_detector_screen2.dart';
+import 'face_detector_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,7 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const FaceDetectorScreen2(),
+                  builder: (context) => const FaceDetectorScreen(),
                 ),
               );
             },
