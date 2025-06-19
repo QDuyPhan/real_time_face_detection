@@ -59,6 +59,13 @@ class _FaceDetectorScreenState extends State<FaceDetectorScreen> {
     );
   }
 
+  void resetDetection() {
+    setState(() {
+      _customPaint = null;
+      _text = null;
+    });
+  }
+
   Future<void> processImage(InputImage inputImage) async {
     if (!_canProcess) return;
     if (_isBusy) return;

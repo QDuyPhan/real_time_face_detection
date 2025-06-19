@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as imglib;
+
 import 'app_config.dart';
 
 @pragma('vm:entry-point')
@@ -19,6 +19,8 @@ Future<void> processImage(List<Object> args) async {
     ReceivePort imagePort = ReceivePort();
     // Gửi SendPort của isolate này về main isolate
     sendPort.send(imagePort.sendPort);
+
+    app_config.printLog('i', 'ImagePort: $imagePort');
 
     final FaceDetector faceDetector = FaceDetector(
       options: FaceDetectorOptions(
@@ -36,16 +38,9 @@ Future<void> processImage(List<Object> args) async {
 
     //Xử lý dữ liệu hình ảnh
     await for (var message in imagePort) {
-      app_config.printLog(
-        'i',
-        '[Isolate] message received: '
-            '[33m$message[0m',
-      );
+      app_config.printLog('i', '[Isolate] message received: $message');
       if (message is List) {
-        app_config.printLog(
-          'i',
-          '[Isolate] message length: [36m${message.length}[0m',
-        );
+        app_config.printLog('i', '[Isolate] message length: ${message.length}');
         if (message.isNotEmpty && message.length == 3) {
           if (message[0] is CameraImage &&
               message[1] is int &&
@@ -105,7 +100,7 @@ Future<void> processImage(List<Object> args) async {
             List<Face> faces = await faceDetector.processImage(inputImage);
             app_config.printLog(
               'i',
-              '[Debug camera] faces : [32m${faces.length}[0m',
+              '[Debug camera] faces : [32m${faces.length}',
             );
             imglib.Image img = decodeNV21(inputImage);
             sendMsg.send([
@@ -225,7 +220,7 @@ class APICamera {
   int _camera_index = 0;
 
   ///Đối tượng điều khiển camera (tùy chọn, có thể là null nếu chưa khởi tạo).
-  CameraController? controller;
+  CameraController? _controller;
 
   late Isolate _isolate;
   late SendPort sendPort;
@@ -281,10 +276,7 @@ class APICamera {
               final imglib.Image img = message[1];
               final Size size = message[2];
               final InputImageRotation rotation = message[3];
-              app_config.printLog(
-                'i',
-                '[Debug] size : [32m${faces.length}[0m',
-              );
+              app_config.printLog('i', '[Debug] size : [32m${faces.length}');
               streamDectectFaceController.sink.add([
                 faces,
                 img,
@@ -328,20 +320,20 @@ class APICamera {
           );
         }
         if (_cameras[_camera_index] != null) {
-          if (controller != null) {
-            await controller!.stopImageStream();
-            controller = null;
+          if (_controller != null) {
+            await _controller!.stopImageStream();
+            _controller = null;
           }
-          controller = CameraController(
+          _controller = CameraController(
             _cameras[_camera_index],
             ResolutionPreset.medium,
             enableAudio: false,
             imageFormatGroup: ImageFormatGroup.yuv420,
           );
-          if (controller != null) {
+          if (_controller != null) {
             try {
-              await controller!.initialize();
-              controller!.startImageStream((value) {
+              await _controller!.initialize();
+              _controller!.startImageStream((value) {
                 CameraImage image = value;
                 int sensorOrientation =
                     _cameras[_camera_index].sensorOrientation;
@@ -411,10 +403,10 @@ class APICamera {
   Future<void> stop() async {
     if (_run == true) {
       try {
-        if (controller != null) {
-          await controller!.stopImageStream();
-          await controller!.dispose();
-          controller = null;
+        if (_controller != null) {
+          await _controller!.stopImageStream();
+          await _controller!.dispose();
+          _controller = null;
           _run = false;
         }
       } catch (e) {
@@ -508,4 +500,6 @@ class APICamera {
   Uint8List convertJPG(imglib.Image image) {
     return Uint8List.fromList(imglib.encodeJpg(image, quality: 90));
   }
+
+  CameraController? get cameraController => _controller;
 }

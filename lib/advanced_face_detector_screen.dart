@@ -2,6 +2,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as imglib;
+import 'dart:async';
 
 import 'api_face.dart';
 import 'face_detector_painter.dart';
@@ -22,15 +23,14 @@ class _AdvancedFaceDetectorScreenState
   List<InfoPerson> _detectedPersons = [];
   String _statusText = 'Initializing...';
 
-  // Camera controller
-  CameraController? _controller;
-  int _cameraIndex = 0;
-
   // Face detection và painting
   List<Face> _currentFaces = [];
   CustomPaint? _customPaint;
   Size? _imageSize;
   InputImageRotation _rotation = InputImageRotation.rotation0deg;
+  StreamSubscription? _faceStreamSub;
+
+  CameraController? get _controller => _apiFace.camera.cameraController;
 
   @override
   void initState() {
@@ -53,30 +53,6 @@ class _AdvancedFaceDetectorScreenState
         }
       });
 
-      // Lắng nghe stream face detection để cập nhật painter
-      _apiFace.streamFaceController.stream.listen((event) {
-        if (event is List && event.length == 4) {
-          if (event[0] is List<Face> &&
-              event[1] is imglib.Image &&
-              event[2] is Size &&
-              event[3] is InputImageRotation) {
-            List<Face> faces = event[0];
-            imglib.Image img = event[1];
-            Size size = event[2];
-            InputImageRotation rotation = event[3];
-            setState(() {
-              _currentFaces = faces;
-              _statusText = 'Processing ${faces.length} face(s)';
-              _imageSize = size;
-              _rotation = rotation;
-              _customPaint = CustomPaint(
-                painter: FaceDetectorPainter(faces, size, rotation),
-              );
-            });
-          }
-        }
-      });
-
       setState(() {
         _isInitialized = true;
         _statusText = 'Ready - Tap to start detection';
@@ -88,53 +64,80 @@ class _AdvancedFaceDetectorScreenState
     }
   }
 
+  void _listenFaceStream() {
+    _faceStreamSub?.cancel();
+    _faceStreamSub = _apiFace.streamFaceController.stream.listen((event) {
+      if (event is List && event.length == 4) {
+        if (event[0] is List<Face> &&
+            event[1] is imglib.Image &&
+            event[2] is Size &&
+            event[3] is InputImageRotation) {
+          List<Face> faces = event[0];
+          imglib.Image img = event[1];
+          Size size = event[2];
+          InputImageRotation rotation = event[3];
+          setState(() {
+            _currentFaces = faces;
+            _statusText = 'Processing ${faces.length} face(s)';
+            _imageSize = size;
+            _rotation = rotation;
+            _customPaint = CustomPaint(
+              painter: FaceDetectorPainter(faces, size, rotation),
+            );
+          });
+        }
+      }
+    });
+  }
+
   @override
   void dispose() {
     _apiFace.stop();
-    _controller?.dispose();
+    _faceStreamSub?.cancel();
     super.dispose();
   }
 
-  Future<void> _startCamera() async {
+  Future<void> _startDetection() async {
     try {
-      // Tìm camera front
-      if (cameras.any(
-        (element) =>
-            element.lensDirection == CameraLensDirection.front &&
-            element.sensorOrientation == 90,
-      )) {
-        _cameraIndex = cameras.indexOf(
-          cameras.firstWhere(
-            (element) =>
-                element.lensDirection == CameraLensDirection.front &&
-                element.sensorOrientation == 90,
-          ),
-        );
-      } else {
-        _cameraIndex = cameras.indexOf(
-          cameras.firstWhere(
-            (element) => element.lensDirection == CameraLensDirection.front,
-          ),
-        );
-      }
+      setState(() {
+        _customPaint = null;
+        _currentFaces = [];
+        _imageSize = Size.zero;
+        _rotation = InputImageRotation.rotation0deg;
+        _statusText = 'Starting detection...';
+      });
+      // KHÔNG gọi _startCamera nữa
+      // await _startCamera();
 
-      final camera = cameras[_cameraIndex];
-      _controller = CameraController(
-        camera,
-        ResolutionPreset.low, // Sử dụng resolution thấp để tối ưu hiệu suất
-        enableAudio: false,
-        imageFormatGroup:
-            ImageFormatGroup.nv21, // Sử dụng format tương thích với api_camera
-      );
+      // Chỉ cần khởi động face detection (camera sẽ được APICamera quản lý)
+      await _apiFace.start();
 
-      await _controller!.initialize();
+      _listenFaceStream();
 
-      if (mounted) {
-        setState(() {});
-      }
+      setState(() {
+        _statusText = 'Detection started';
+      });
     } catch (e) {
       setState(() {
-        _statusText = 'Error starting camera: $e';
+        _statusText = 'Error starting detection: $e';
+      });
+    }
+  }
+
+  Future<void> _stopDetection() async {
+    try {
+      _apiFace.stop();
+      await _faceStreamSub?.cancel();
+      setState(() {
+        _customPaint = null;
+        _currentFaces = [];
+        _imageSize = Size.zero;
+        _rotation = InputImageRotation.rotation0deg;
+        _statusText = 'Detection stopped';
+      });
+    } catch (e) {
+      setState(() {
+        _statusText = 'Error stopping detection: $e';
       });
     }
   }
@@ -421,41 +424,5 @@ class _AdvancedFaceDetectorScreenState
         ],
       ),
     );
-  }
-
-  Future<void> _startDetection() async {
-    try {
-      // Khởi động camera trước
-      await _startCamera();
-
-      // Sau đó khởi động face detection
-      await _apiFace.start();
-
-      setState(() {
-        _statusText = 'Detection started';
-      });
-    } catch (e) {
-      setState(() {
-        _statusText = 'Error starting detection: $e';
-      });
-    }
-  }
-
-  Future<void> _stopDetection() async {
-    try {
-      _apiFace.stop();
-      await _controller?.dispose();
-      _controller = null;
-
-      setState(() {
-        _statusText = 'Detection stopped';
-        _currentFaces = [];
-        _customPaint = null;
-      });
-    } catch (e) {
-      setState(() {
-        _statusText = 'Error stopping detection: $e';
-      });
-    }
   }
 }

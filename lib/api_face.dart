@@ -217,6 +217,17 @@ class APIFace {
                               height: y2 - y1,
                             );
 
+                            ///Xoay lại buffer dựa trên rotation
+                            if (rotation == InputImageRotation.rotation90deg) {
+                              buffer = imglib.copyRotate(buffer, angle: 90);
+                            } else if (rotation ==
+                                InputImageRotation.rotation180deg) {
+                              buffer = imglib.copyRotate(buffer, angle: 180);
+                            } else if (rotation ==
+                                InputImageRotation.rotation270deg) {
+                              buffer = imglib.copyRotate(buffer, angle: 270);
+                            }
+
                             ///Nén buffer thành JPEG với chất lượng 90 và chuyển thành Uint8List,
                             /// gán vào image của persons[j].
                             persons[j].image = Uint8List.fromList(
@@ -286,6 +297,16 @@ class APIFace {
                         width: x2 - x1,
                         height: y2 - y1,
                       );
+                      // Xoay lại buffer dựa trên rotation
+                      if (rotation == InputImageRotation.rotation90deg) {
+                        buffer = imglib.copyRotate(buffer, angle: 90);
+                      } else if (rotation ==
+                          InputImageRotation.rotation180deg) {
+                        buffer = imglib.copyRotate(buffer, angle: 180);
+                      } else if (rotation ==
+                          InputImageRotation.rotation270deg) {
+                        buffer = imglib.copyRotate(buffer, angle: 270);
+                      }
                       info.image = Uint8List.fromList(
                         imglib.encodeJpg(buffer, quality: 90),
                       );
@@ -340,6 +361,14 @@ class APIFace {
                       width: x2 - x1,
                       height: y2 - y1,
                     );
+                    // Xoay lại buffer dựa trên rotation
+                    if (rotation == InputImageRotation.rotation90deg) {
+                      buffer = imglib.copyRotate(buffer, angle: 90);
+                    } else if (rotation == InputImageRotation.rotation180deg) {
+                      buffer = imglib.copyRotate(buffer, angle: 180);
+                    } else if (rotation == InputImageRotation.rotation270deg) {
+                      buffer = imglib.copyRotate(buffer, angle: 270);
+                    }
                     info.image = Uint8List.fromList(
                       imglib.encodeJpg(buffer, quality: 90),
                     );
