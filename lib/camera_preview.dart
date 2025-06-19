@@ -15,6 +15,7 @@ class Camerapreview extends StatefulWidget {
   final String? title;
   final Function(InputImage inputIamge) onImage;
   final CameraLensDirection cameraLensDirection;
+  final bool showAppBar;
 
   const Camerapreview({
     super.key,
@@ -23,6 +24,7 @@ class Camerapreview extends StatefulWidget {
     this.title,
     required this.onImage,
     required this.cameraLensDirection,
+    this.showAppBar = true,
   });
 
   @override
@@ -232,6 +234,11 @@ class _CamerapreviewState extends State<Camerapreview> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.showAppBar) {
+      // Khi không hiển thị AppBar, chỉ trả về body
+      return _body();
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title!),
@@ -291,6 +298,12 @@ class _CamerapreviewState extends State<Camerapreview> {
     } else {
       body = _galleryBody();
     }
+
+    // Nếu không hiển thị AppBar, chỉ trả về camera preview
+    if (!widget.showAppBar) {
+      return body;
+    }
+
     return body;
   }
 

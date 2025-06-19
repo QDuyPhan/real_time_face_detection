@@ -1,8 +1,10 @@
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as imglib;
 
 import 'api_face.dart';
+import 'face_detector_painter.dart';
 import 'main.dart';
 
 class AdvancedFaceDetectorScreen extends StatefulWidget {
@@ -19,6 +21,16 @@ class _AdvancedFaceDetectorScreenState
   bool _isInitialized = false;
   List<InfoPerson> _detectedPersons = [];
   String _statusText = 'Initializing...';
+
+  // Camera controller
+  CameraController? _controller;
+  int _cameraIndex = 0;
+
+  // Face detection và painting
+  List<Face> _currentFaces = [];
+  CustomPaint? _customPaint;
+  Size? _imageSize;
+  InputImageRotation _rotation = InputImageRotation.rotation0deg;
 
   @override
   void initState() {
@@ -41,13 +53,25 @@ class _AdvancedFaceDetectorScreenState
         }
       });
 
-      // Lắng nghe stream face detection để hiển thị thông tin debug
+      // Lắng nghe stream face detection để cập nhật painter
       _apiFace.streamFaceController.stream.listen((event) {
-        if (event is List && event.isNotEmpty) {
-          if (event[0] is List<Face> && event[1] is imglib.Image) {
+        if (event is List && event.length == 4) {
+          if (event[0] is List<Face> &&
+              event[1] is imglib.Image &&
+              event[2] is Size &&
+              event[3] is InputImageRotation) {
             List<Face> faces = event[0];
+            imglib.Image img = event[1];
+            Size size = event[2];
+            InputImageRotation rotation = event[3];
             setState(() {
+              _currentFaces = faces;
               _statusText = 'Processing ${faces.length} face(s)';
+              _imageSize = size;
+              _rotation = rotation;
+              _customPaint = CustomPaint(
+                painter: FaceDetectorPainter(faces, size, rotation),
+              );
             });
           }
         }
@@ -67,7 +91,52 @@ class _AdvancedFaceDetectorScreenState
   @override
   void dispose() {
     _apiFace.stop();
+    _controller?.dispose();
     super.dispose();
+  }
+
+  Future<void> _startCamera() async {
+    try {
+      // Tìm camera front
+      if (cameras.any(
+        (element) =>
+            element.lensDirection == CameraLensDirection.front &&
+            element.sensorOrientation == 90,
+      )) {
+        _cameraIndex = cameras.indexOf(
+          cameras.firstWhere(
+            (element) =>
+                element.lensDirection == CameraLensDirection.front &&
+                element.sensorOrientation == 90,
+          ),
+        );
+      } else {
+        _cameraIndex = cameras.indexOf(
+          cameras.firstWhere(
+            (element) => element.lensDirection == CameraLensDirection.front,
+          ),
+        );
+      }
+
+      final camera = cameras[_cameraIndex];
+      _controller = CameraController(
+        camera,
+        ResolutionPreset.low, // Sử dụng resolution thấp để tối ưu hiệu suất
+        enableAudio: false,
+        imageFormatGroup:
+            ImageFormatGroup.nv21, // Sử dụng format tương thích với api_camera
+      );
+
+      await _controller!.initialize();
+
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      setState(() {
+        _statusText = 'Error starting camera: $e';
+      });
+    }
   }
 
   @override
@@ -97,11 +166,18 @@ class _AdvancedFaceDetectorScreenState
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Camera: ${_apiFace.state() ? "Running" : "Stopped"}',
+                  'Camera: ${_controller?.value.isInitialized == true ? "Running" : "Stopped"}',
                   style: TextStyle(
                     fontSize: 14,
-                    color: _apiFace.state() ? Colors.green : Colors.red,
+                    color:
+                        _controller?.value.isInitialized == true
+                            ? Colors.green
+                            : Colors.red,
                   ),
+                ),
+                Text(
+                  'Faces detected: ${_currentFaces.length}',
+                  style: const TextStyle(fontSize: 14),
                 ),
               ],
             ),
@@ -135,188 +211,191 @@ class _AdvancedFaceDetectorScreenState
             ),
           ),
 
+          // Camera preview with face detection overlay
+          Expanded(
+            flex: 2,
+            child: Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child:
+                    _controller?.value.isInitialized == true
+                        ? _buildCameraPreview()
+                        : Container(
+                          color: Colors.grey[200],
+                          child: const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.camera_alt,
+                                  size: 64,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'Camera not started',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+              ),
+            ),
+          ),
+
           // Detected persons list
           Expanded(
+            flex: 1,
             child:
                 _detectedPersons.isEmpty
                     ? const Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.face, size: 64, color: Colors.grey),
-                          SizedBox(height: 16),
+                          Icon(Icons.face, size: 48, color: Colors.grey),
+                          SizedBox(height: 8),
                           Text(
                             'No faces detected',
-                            style: TextStyle(fontSize: 18, color: Colors.grey),
-                          ),
-                          Text(
-                            'Start detection to see results',
-                            style: TextStyle(fontSize: 14, color: Colors.grey),
+                            style: TextStyle(fontSize: 16, color: Colors.grey),
                           ),
                         ],
                       ),
                     )
-                    : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _detectedPersons.length,
-                      itemBuilder: (context, index) {
-                        final person = _detectedPersons[index];
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                    : Container(
+                      margin: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(12),
+                                topRight: Radius.circular(12),
+                              ),
+                            ),
+                            child: Row(
                               children: [
-                                Row(
-                                  children: [
-                                    // Face image preview
-                                    if (person.image.isNotEmpty)
-                                      Container(
-                                        width: 60,
-                                        height: 60,
-                                        decoration: BoxDecoration(
-                                          border: Border.all(
-                                            color: Colors.grey,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          child: Image.memory(
-                                            person.image,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                      )
-                                    else
-                                      Container(
-                                        width: 60,
-                                        height: 60,
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey[300],
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        child: const Icon(
-                                          Icons.face,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-
-                                    const SizedBox(width: 16),
-
-                                    // Person info
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Face ID: ${person.faceId}',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            'Position: (${person.x.toStringAsFixed(1)}, ${person.y.toStringAsFixed(1)})',
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                          Text(
-                                            'Size: ${person.w.toStringAsFixed(1)} x ${person.h.toStringAsFixed(1)}',
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                          Text(
-                                            'Angles: X:${person.angleX.toStringAsFixed(1)}°, Y:${person.angleY.toStringAsFixed(1)}°, Z:${person.angleZ.toStringAsFixed(1)}°',
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                          if (person.name.isNotEmpty)
-                                            Text(
-                                              'Name: ${person.name}',
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.blue,
-                                              ),
-                                            ),
-                                          if (person.phone.isNotEmpty)
-                                            Text(
-                                              'Phone: ${person.phone}',
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.green,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-
-                                    // Status indicators
-                                    Column(
-                                      children: [
-                                        Container(
-                                          width: 12,
-                                          height: 12,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color:
-                                                person.busy
-                                                    ? Colors.orange
-                                                    : Colors.green,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          person.busy ? 'Busy' : 'Ready',
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-
-                                const SizedBox(height: 8),
-
-                                // Action buttons
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceEvenly,
-                                  children: [
-                                    ElevatedButton(
-                                      onPressed:
-                                          person.image.isNotEmpty
-                                              ? () => _registerPerson(person)
-                                              : null,
-                                      child: const Text('Register'),
-                                    ),
-                                    ElevatedButton(
-                                      onPressed:
-                                          person.image.isNotEmpty
-                                              ? () => _identifyPerson(person)
-                                              : null,
-                                      child: const Text('Identify'),
-                                    ),
-                                  ],
+                                const Icon(Icons.people, color: Colors.blue),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Detected Persons (${_detectedPersons.length})',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                        );
-                      },
+                          Expanded(
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(8),
+                              itemCount: _detectedPersons.length,
+                              itemBuilder: (context, index) {
+                                final person = _detectedPersons[index];
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: ListTile(
+                                    leading:
+                                        person.image.isNotEmpty
+                                            ? Container(
+                                              width: 50,
+                                              height: 50,
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: Colors.grey[300]!,
+                                                ),
+                                              ),
+                                              child: ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                child: Image.memory(
+                                                  person.image,
+                                                  fit: BoxFit.cover,
+                                                ),
+                                              ),
+                                            )
+                                            : Container(
+                                              width: 50,
+                                              height: 50,
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey[300],
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(
+                                                Icons.face,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                    title: Text(
+                                      'Face ID: ${person.faceId}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    subtitle: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Position: (${person.x.toStringAsFixed(1)}, ${person.y.toStringAsFixed(1)})',
+                                        ),
+                                        Text(
+                                          'Size: ${person.w.toStringAsFixed(1)} x ${person.h.toStringAsFixed(1)}',
+                                        ),
+                                        if (person.name.isNotEmpty)
+                                          Text(
+                                            'Name: ${person.name}',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.blue,
+                                            ),
+                                          ),
+                                        if (person.phone.isNotEmpty)
+                                          Text(
+                                            'Phone: ${person.phone}',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.green,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    trailing: Container(
+                                      width: 12,
+                                      height: 12,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color:
+                                            person.busy
+                                                ? Colors.orange
+                                                : Colors.green,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
           ),
         ],
@@ -324,9 +403,34 @@ class _AdvancedFaceDetectorScreenState
     );
   }
 
+  Widget _buildCameraPreview() {
+    final size = MediaQuery.of(context).size;
+    var scale = size.aspectRatio * _controller!.value.aspectRatio;
+    if (scale < 1) scale = 1 / scale;
+
+    return Container(
+      color: Colors.black,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Transform.scale(
+            scale: scale,
+            child: Center(child: CameraPreview(_controller!)),
+          ),
+          if (_customPaint != null) _customPaint!,
+        ],
+      ),
+    );
+  }
+
   Future<void> _startDetection() async {
     try {
+      // Khởi động camera trước
+      await _startCamera();
+
+      // Sau đó khởi động face detection
       await _apiFace.start();
+
       setState(() {
         _statusText = 'Detection started';
       });
@@ -340,53 +444,18 @@ class _AdvancedFaceDetectorScreenState
   Future<void> _stopDetection() async {
     try {
       _apiFace.stop();
+      await _controller?.dispose();
+      _controller = null;
+
       setState(() {
         _statusText = 'Detection stopped';
+        _currentFaces = [];
+        _customPaint = null;
       });
     } catch (e) {
       setState(() {
         _statusText = 'Error stopping detection: $e';
       });
     }
-  }
-
-  void _registerPerson(InfoPerson person) {
-    // TODO: Implement person registration
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Register Person'),
-            content: const Text(
-              'This feature will be implemented to register a new person with the detected face.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  void _identifyPerson(InfoPerson person) {
-    // TODO: Implement person identification
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Identify Person'),
-            content: const Text(
-              'This feature will be implemented to identify the person from the detected face.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-    );
   }
 }

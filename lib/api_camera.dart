@@ -36,50 +36,90 @@ Future<void> processImage(List<Object> args) async {
 
     //Xử lý dữ liệu hình ảnh
     await for (var message in imagePort) {
+      app_config.printLog(
+        'i',
+        '[Isolate] message received: '
+            '[33m$message[0m',
+      );
       if (message is List) {
+        app_config.printLog(
+          'i',
+          '[Isolate] message length: [36m${message.length}[0m',
+        );
         if (message.isNotEmpty && message.length == 3) {
           if (message[0] is CameraImage &&
               message[1] is int &&
               message[2] is SendPort) {
-            final CameraImage image = message[0]; //Lấy hình ảnh từ camera.
-            final SendPort sendMsg = message[2]; //Lấy cổng gửi kết quả trở lại.
+            final CameraImage image = message[0];
+            final int sensorOrientation = message[1];
+            final SendPort sendMsg = message[2];
 
-            //Kiểm tra định dạng hình ảnh
-            InputImageFormat? inputImageFormat =
-                InputImageFormatValue.fromRawValue(
-                  image.format.raw,
-                ); //Chuyển đổi định dạng ảnh thô (raw) thành định dạng phù hợp.
-            if (inputImageFormat == null ||
-                (Platform.isAndroid &&
-                    inputImageFormat != InputImageFormat.nv21) ||
-                (Platform.isIOS &&
-                    inputImageFormat != InputImageFormat.bgra8888)) {
+            // Kiểm tra số lượng planes
+            if (image.planes.length < 3) {
+              app_config.printLog(
+                'e',
+                '[Error Camera] CameraImage does not have 3 planes!',
+              );
+              continue;
+            }
+            // Kiểm tra format
+            if (image.format.group != ImageFormatGroup.yuv420) {
+              app_config.printLog(
+                'e',
+                '[Error Camera] CameraImage format is not yuv420!',
+              );
               continue;
             }
 
-            if (image.planes.length != 1) {
-              continue;
+            // Chuyển sensorOrientation thành InputImageRotation
+            InputImageRotation rotation;
+            switch (sensorOrientation) {
+              case 0:
+                rotation = InputImageRotation.rotation0deg;
+                break;
+              case 90:
+                rotation = InputImageRotation.rotation90deg;
+                break;
+              case 180:
+                rotation = InputImageRotation.rotation180deg;
+                break;
+              case 270:
+                rotation = InputImageRotation.rotation270deg;
+                break;
+              default:
+                rotation = InputImageRotation.rotation0deg;
             }
 
-            Plane plane = image.planes.first;
-
+            // Chuyển CameraImage (3 planes) sang NV21 đúng chuẩn
+            Uint8List nv21Bytes = convertYUV420ToNV21Safe(image);
             InputImage inputImage = InputImage.fromBytes(
-              bytes: plane.bytes,
-              // InputImageMetadata Cung cấp thông tin như kích thước, định dạng, số byte mỗi hàng (bytesPerRow), và góc quay (rotation0deg).
+              bytes: nv21Bytes,
               metadata: InputImageMetadata(
                 size: Size(image.width.toDouble(), image.height.toDouble()),
-                format: inputImageFormat,
-                bytesPerRow: plane.bytesPerRow,
-                rotation: InputImageRotation.rotation0deg,
+                format: InputImageFormat.nv21,
+                bytesPerRow: image.planes[0].bytesPerRow,
+                rotation: rotation,
               ),
             );
 
             List<Face> faces = await faceDetector.processImage(inputImage);
-            app_config.printLog('d', '[Debug camera] faces : ${faces.length}');
+            app_config.printLog(
+              'i',
+              '[Debug camera] faces : [32m${faces.length}[0m',
+            );
             imglib.Image img = decodeNV21(inputImage);
-            sendMsg.send([faces, img]);
+            sendMsg.send([
+              faces,
+              img,
+              inputImage.metadata!.size,
+              inputImage.metadata!.rotation,
+            ]);
           }
+        } else {
+          app_config.printLog('e', '[Isolate] message format invalid!');
         }
+      } else {
+        app_config.printLog('e', '[Isolate] message is not a List!');
       }
     }
   } catch (e) {
@@ -127,7 +167,7 @@ Uint8List convertYUV420ToNV21Safe(CameraImage image) {
 
 ///Trả về đối tượng imglib.Image chứa hình ảnh đã được chuyển đổi NV21 sang định dạng RGB.
 ///Bạn nên dùng decodeNV21(...) khi:
-/// Đã có dữ liệu ảnh dạng NV21 (Uint8List) – thường sau khi dùng convertYUV420ToNV21(...).
+/// Đã có dữ liệu ảnh dạng NV21 (Uint8List) – thường sau khi dùng convertYUV420(...).
 /// Muốn hiển thị ảnh hoặc debug trên màn hình.
 /// Không cần gọi model nữa mà chỉ cần xử lý RGB
 /// dùng để gửi ảnh về server
@@ -203,6 +243,9 @@ class APICamera {
   ///Bộ điều khiển luồng để phát dữ liệu phát hiện khuôn mặt tới các subscriber.
   StreamController streamDectectFaceController = StreamController.broadcast();
 
+  ///Bộ điều khiển luồng để gửi thông tin faces lên UI để vẽ bounding box.
+  StreamController streamFacesForUI = StreamController.broadcast();
+
   APICamera(CameraLensDirection direction) {
     _initialDirection = direction;
   }
@@ -215,26 +258,39 @@ class APICamera {
         myReceivePort.sendPort,
         rootIsolateToken,
       ]);
-      app_config.printLog('d', '[Debug] * * * * *');
+      app_config.printLog('i', '[Debug] * * * * *');
       sendPort = await myReceivePort.first;
-      app_config.printLog('d', '[Debug] * * * * * * * * * *');
+      app_config.printLog('i', '[Debug] * * * * * * * * * *');
       _receivePort.listen((message) {
-        app_config.printLog('d', '[Debug camera] finish process image');
+        app_config.printLog('i', '[Debug camera] finish process image');
         if (message is List) {
-          app_config.printLog('d', '[Debug camera] finish process image * ');
-          if (message.isNotEmpty && message.length == 2) {
+          app_config.printLog('i', '[Debug camera] finish process image * ');
+          if (message.isNotEmpty && message.length == 4) {
             app_config.printLog(
-              'd',
+              'i',
               '[Debug camera] finish process image * * ',
             );
-            if (message[0] is List<Face> && message[1] is imglib.Image) {
+            if (message[0] is List<Face> &&
+                message[1] is imglib.Image &&
+                message[2] is Size &&
+                message[3] is InputImageRotation) {
               ///Lấy danh sách khuôn mặt được phát hiện.
               final List<Face> faces = message[0];
 
               ///Lấy hình ảnh đã xử lý.
               final imglib.Image img = message[1];
-              app_config.printLog('d', '[Debug] size : ${faces.length}');
-              streamDectectFaceController.sink.add([faces, img]);
+              final Size size = message[2];
+              final InputImageRotation rotation = message[3];
+              app_config.printLog(
+                'i',
+                '[Debug] size : [32m${faces.length}[0m',
+              );
+              streamDectectFaceController.sink.add([
+                faces,
+                img,
+                size,
+                rotation,
+              ]);
               _busy = false;
             }
           }
@@ -278,9 +334,9 @@ class APICamera {
           }
           controller = CameraController(
             _cameras[_camera_index],
-            ResolutionPreset.low,
+            ResolutionPreset.medium,
             enableAudio: false,
-            imageFormatGroup: ImageFormatGroup.nv21,
+            imageFormatGroup: ImageFormatGroup.yuv420,
           );
           if (controller != null) {
             try {
@@ -292,12 +348,12 @@ class APICamera {
                 if (_busy == false) {
                   _busy = true;
                   app_config.printLog(
-                    'd',
+                    'i',
                     '[Debug camera] start process image',
                   );
                   if (sendPort == null) {
                     app_config.printLog(
-                      'd',
+                      'i',
                       '[Debug camera] start process image * ',
                     );
                   }
@@ -362,7 +418,7 @@ class APICamera {
           _run = false;
         }
       } catch (e) {
-        app_config.printLog('d', '[Debug] : $e');
+        app_config.printLog('i', '[Debug] : $e');
       }
     }
   }

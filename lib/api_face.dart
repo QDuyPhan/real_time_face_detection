@@ -98,6 +98,7 @@ class APIFace {
 
   StreamController streamFaceController = StreamController.broadcast();
   StreamController streamPersonController = StreamController.broadcast();
+  StreamController streamFacesForUI = StreamController.broadcast();
 
   APIFace() {
     camera = APICamera(CameraLensDirection.front);
@@ -110,20 +111,25 @@ class APIFace {
     /// cập nhật hoặc thêm vào persons, quản lý thời gian, và gửi yêu cầu nhận diện khi cần.
     /// Các điều kiện đảm bảo xử lý an toàn, tránh lỗi và tối ưu hóa hiệu suất.
     camera.streamDectectFaceController.stream.listen((event) {
-      if (event is List) {
-        if (event[0] is List<Face> && event[1] is imglib.Image) {
+      if (event is List && event.length == 4) {
+        if (event[0] is List<Face> &&
+            event[1] is imglib.Image &&
+            event[2] is Size &&
+            event[3] is InputImageRotation) {
           List<Face> faces = event[0];
-          app_config.printLog('d', '[Debug face] Size : ${faces.length}');
           imglib.Image img = event[1];
+          Size size = event[2];
+          InputImageRotation rotation = event[3];
+          app_config.printLog('i', '[Debug face] Size : ${faces.length}');
 
-          // Gửi thông tin faces lên stream để UI có thể hiển thị
-          streamFaceController.sink.add([faces, img]);
+          // Gửi thông tin faces lên stream để UI có thể hiển thị (bounding box)
+          streamFaceController.sink.add([faces, img, size, rotation]);
 
           ///Xử lý khi có khuôn mặt
           if (faces.length > 0) {
             for (int i = 0; i < faces.length; i++) {
               app_config.printLog(
-                'd',
+                'i',
                 '[Debug face] Info Face : $i - ${faces[i].trackingId}',
               );
               if (faces[i].trackingId != null) {
@@ -237,7 +243,7 @@ class APIFace {
                   /// nghĩa là không tìm thấy khuôn mặt trong persons, tiến hành thêm mới.
                   if (flag == false) {
                     app_config.printLog(
-                      'd',
+                      'i',
                       '[Debug face] Add : ${faces[i].trackingId!.toString()}',
                     );
                     InfoPerson info = InfoPerson();
@@ -293,7 +299,7 @@ class APIFace {
                 /// thực hiện khối này để thêm mới InfoPerson trực tiếp (tương tự flag == false).
                 else {
                   app_config.printLog(
-                    'd',
+                    'i',
                     '[Debug face] Add : ${faces[i].trackingId!.toString()}',
                   );
                   InfoPerson info = InfoPerson();
@@ -361,7 +367,7 @@ class APIFace {
             }
           }
 
-          app_config.printLog('d', '[Debug face] : length ${persons.length}');
+          app_config.printLog('i', '[Debug face] : length ${persons.length}');
 
           // Gửi danh sách persons cập nhật lên stream để UI có thể hiển thị
           streamPersonController.sink.add(List<InfoPerson>.from(persons));
@@ -371,7 +377,7 @@ class APIFace {
           /// Nếu thời gian từ timecheck > 2000ms (2 giây), gửi yêu cầu.
           if (persons.isNotEmpty) {
             app_config.printLog(
-              'd',
+              'i',
               '[Debug face] : * length ${persons.length}',
             );
             for (int i = 0; i < persons.length; i++) {
@@ -381,11 +387,11 @@ class APIFace {
                     persons[i].timecheck;
                 if (time > 2000) {
                   app_config.printLog(
-                    'd',
+                    'i',
                     '[Debug face] : request detect face ${i} : ${persons[i].faceId}',
                   );
                   app_config.printLog(
-                    'd',
+                    'i',
                     '[Face] : ${persons[i].id} | ${persons[i].faceId} - ${persons[i].lastest} | ${persons[i].angleX} , ${persons[i].angleY} , ${persons[i].angleZ} - ${persons[i].image.length} - ${persons[i].w} x ${persons[i].h}',
                   );
 
@@ -398,7 +404,7 @@ class APIFace {
               } else {
                 ///Nếu time <= 2000ms, in debug rằng không gửi yêu cầu, hiển thị faceId và phone (nếu có).
                 app_config.printLog(
-                  'd',
+                  'i',
                   '[Debug face] : dont request detect face ${i} : ${persons[i].faceId} : ${persons[i].phone}',
                 );
               }
