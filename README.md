@@ -1,185 +1,140 @@
-# Real-Time Face Detection & Recognition System
+# Real-Time Face Detection
 
-Ứng dụng Flutter với khả năng phát hiện và nhận diện khuôn mặt thời gian thực, hoạt động hoàn toàn offline trên thiết bị di động.
+Ứng dụng Flutter với khả năng nhận diện khuôn mặt thời gian thực sử dụng Google ML Kit.
 
-## 🚀 Tính năng chính
+## Tính năng
 
-### ✨ Face Detection (Phát hiện khuôn mặt)
+### 1. Basic Face Detection
 
-- Phát hiện khuôn mặt thời gian thực từ camera
-- Theo dõi nhiều khuôn mặt cùng lúc
-- Lọc khuôn mặt dựa trên góc quay (chỉ xử lý khuôn mặt thẳng)
-- Tối ưu hóa hiệu suất với Isolate
+- Phát hiện khuôn mặt đơn giản với bounding boxes
+- Hiển thị thông tin cơ bản về khuôn mặt
+- Chế độ camera trực tiếp và gallery
 
-### 🎯 Face Recognition (Nhận diện khuôn mặt)
+### 2. Advanced Face Detection (Mới)
 
-- **Hoạt động offline hoàn toàn** - không cần kết nối internet
-- Lưu trữ khuôn mặt trong cơ sở dữ liệu SQLite local
-- So sánh khuôn mặt với độ chính xác cao
-- Hiển thị thông tin người dùng khi nhận diện thành công
+- **Real-time tracking**: Theo dõi khuôn mặt qua nhiều frame
+- **Face registration**: Đăng ký khuôn mặt mới với thông tin cá nhân
+- **Face identification**: Nhận diện khuôn mặt đã đăng ký
+- **Multi-face tracking**: Theo dõi nhiều khuôn mặt cùng lúc
+- **Angle detection**: Phát hiện góc nghiêng của khuôn mặt
+- **Image cropping**: Tự động cắt ảnh khuôn mặt với chất lượng cao
+- **Background processing**: Xử lý ảnh trên isolate riêng để tối ưu hiệu suất
 
-### 👥 Face Management (Quản lý khuôn mặt)
+## Cấu trúc Logic Nhận Diện Nâng Cao
 
-- Đăng ký khuôn mặt mới với tên và số điện thoại
-- Xem danh sách tất cả khuôn mặt đã đăng ký
-- Chỉnh sửa thông tin người dùng
-- Xóa khuôn mặt không cần thiết
+### API Camera (`api_camera.dart`)
 
-## 🛠️ Công nghệ sử dụng
+- Quản lý camera và stream ảnh
+- Xử lý ảnh trên background isolate
+- Chuyển đổi định dạng ảnh (YUV420 → NV21 → RGB)
+- Tối ưu hóa hiệu suất với multi-threading
 
-- **Flutter** - Framework UI
-- **Google ML Kit** - Face Detection
-- **Camera Plugin** - Truy cập camera
-- **SQLite** - Lưu trữ dữ liệu local
-- **Isolate** - Xử lý đa luồng
-- **Image Processing** - Xử lý và so sánh ảnh
+### API Face (`api_face.dart`)
 
-## 📱 Cài đặt và chạy
+- Quản lý danh sách khuôn mặt được theo dõi
+- Tracking khuôn mặt qua tracking ID
+- Lọc khuôn mặt dựa trên góc nghiêng
+- Cắt ảnh khuôn mặt tự động
+- Quản lý thời gian và lifecycle của khuôn mặt
 
-### Yêu cầu hệ thống
+### InfoPerson Class
 
-- Flutter SDK 3.7.2+
-- Android Studio / VS Code
-- Thiết bị Android/iOS hoặc emulator
+```dart
+class InfoPerson {
+  String id = "";           // ID người dùng
+  String name = "";         // Tên người dùng
+  String phone = "";        // Số điện thoại
+  String faceId = "";       // ID khuôn mặt (tracking ID)
+  double angleX = 0;        // Góc nghiêng X
+  double angleY = 0;        // Góc nghiêng Y
+  double angleZ = 0;        // Góc nghiêng Z
+  double x = 0, y = 0;      // Tọa độ trung tâm
+  double w = 0, h = 0;      // Kích thước khuôn mặt
+  Uint8List image;          // Ảnh khuôn mặt đã cắt
+  bool busy = false;        // Trạng thái xử lý
+  bool check = false;       // Cần gửi yêu cầu nhận diện
+}
+```
 
-### Cài đặt dependencies
+## Cách Sử Dụng
+
+### 1. Khởi chạy ứng dụng
 
 ```bash
 flutter pub get
-```
-
-### Chạy ứng dụng
-
-```bash
 flutter run
 ```
 
-## 🎮 Hướng dẫn sử dụng
+### 2. Chọn chế độ nhận diện
 
-### 1. Màn hình chính
+- **Basic Face Detector**: Nhận diện đơn giản
+- **Advanced Face Detection**: Nhận diện nâng cao với tracking
 
-- **Face Recognition**: Bắt đầu nhận diện khuôn mặt thời gian thực
-- **Face Management**: Quản lý danh sách khuôn mặt đã đăng ký
-- **Legacy Face Detector**: Chế độ phát hiện khuôn mặt cũ
+### 3. Sử dụng Advanced Face Detection
 
-### 2. Đăng ký khuôn mặt mới
+1. Nhấn "Start" để bắt đầu nhận diện
+2. Đặt khuôn mặt trong khung camera
+3. Hệ thống sẽ tự động:
+   - Phát hiện và track khuôn mặt
+   - Cắt ảnh khi khuôn mặt thẳng (góc < 45°)
+   - Hiển thị thông tin chi tiết
+4. Sử dụng nút "Register" hoặc "Identify" để đăng ký/nhận diện
 
-1. Vào **Face Management**
-2. Nhấn nút **+** (Floating Action Button)
-3. Nhập tên và số điện thoại
-4. Nhìn thẳng vào camera và giữ nguyên tư thế
-5. Hệ thống sẽ tự động chụp và lưu khuôn mặt
+## Cấu hình
 
-### 3. Nhận diện khuôn mặt
+### Camera Settings
 
-1. Vào **Face Recognition**
-2. Nhìn vào camera
-3. Hệ thống sẽ hiển thị:
-   - ✅ **Recognized!** + tên + số điện thoại + độ chính xác (nếu nhận diện được)
-   - ❓ **Unknown Face** (nếu không nhận diện được)
+- Resolution: `ResolutionPreset.low` (tối ưu hiệu suất)
+- Format: `ImageFormatGroup.nv21`
+- Audio: Disabled
 
-## 🏗️ Kiến trúc hệ thống
-
-### Core Components
-
-```
-lib/
-├── api_face/
-│   ├── api_face.dart          # Engine xử lý chính
-│   ├── api_camera.dart        # Quản lý camera
-│   └── local_face_database.dart # Database local
-├── screens/
-│   ├── camera_screen.dart     # Màn hình nhận diện
-│   └── face_management_screen.dart # Màn hình quản lý
-└── home_screen.dart           # Màn hình chính
-```
-
-### Luồng xử lý
-
-1. **Camera Stream** → **Face Detection** → **Image Processing**
-2. **Local Database** → **Face Comparison** → **Recognition Result**
-3. **UI Update** → **Display Result**
-
-## 🔧 Tùy chỉnh
-
-### Ngưỡng nhận diện
-
-Trong `local_face_database.dart`, thay đổi ngưỡng similarity:
+### Face Detection Settings
 
 ```dart
-if (similarity > bestSimilarity && similarity > 0.7) // 70%
+FaceDetectorOptions(
+  enableContours: true,      // Phát hiện đường viền
+  enableClassification: true, // Phân loại cảm xúc
+  enableTracking: true,      // Tracking khuôn mặt
+  performanceMode: FaceDetectorMode.accurate, // Chế độ chính xác
+)
 ```
 
-### Kích thước ảnh
+### Tracking Parameters
 
-Trong `api_face.dart`, điều chỉnh các tham số cắt ảnh:
+- **Time threshold**: 1000ms (1 giây) để loại bỏ khuôn mặt cũ
+- **Angle threshold**: 45° để lọc khuôn mặt thẳng
+- **Request interval**: 2000ms (2 giây) giữa các yêu cầu nhận diện
+- **Crop margins**: 60% width, 75-85% height
 
-```dart
-double s_x1 = 0.6;  // Tỷ lệ cắt ngang
-double s_y1 = 0.75; // Tỷ lệ cắt dọc
+## Tối ưu hóa Hiệu suất
+
+1. **Background Processing**: Xử lý ảnh trên isolate riêng
+2. **Image Format**: Sử dụng NV21 format cho Android
+3. **Resolution**: Giảm độ phân giải để tăng tốc độ
+4. **Memory Management**: Tự động dọn dẹp khuôn mặt cũ
+5. **Stream Management**: Sử dụng StreamController để cập nhật UI
+
+## Dependencies
+
+```yaml
+dependencies:
+  camera: ^0.10.5+9
+  google_mlkit_face_detection: ^0.9.0
+  image: ^4.0.17
+  permission_handler: ^12.0.0+1
 ```
 
-### Tần suất nhận diện
+## Lưu ý
 
-Thay đổi thời gian giữa các lần nhận diện:
+- Cần cấp quyền camera khi chạy ứng dụng
+- Logic nâng cao hoạt động tốt nhất với khuôn mặt thẳng
+- Hệ thống tự động quản lý memory và performance
+- Có thể mở rộng để tích hợp với server API cho nhận diện từ xa
 
-```dart
-if (time > 2000) // 2 giây
-```
+## Tương lai
 
-## 📊 Hiệu suất
-
-- **FPS**: 15-30 FPS tùy thiết bị
-- **Độ chính xác**: 85-95% với điều kiện ánh sáng tốt
-- **Bộ nhớ**: ~50MB cho 100 khuôn mặt
-- **Thời gian phản hồi**: <500ms
-
-## 🔒 Bảo mật
-
-- Dữ liệu được lưu trữ local hoàn toàn
-- Không gửi ảnh lên server
-- Mã hóa hash cho ảnh khuôn mặt
-- Quyền truy cập camera được kiểm soát
-
-## 🐛 Troubleshooting
-
-### Lỗi thường gặp
-
-1. **Camera không hoạt động**: Kiểm tra quyền truy cập camera
-2. **Nhận diện không chính xác**: Điều chỉnh ánh sáng và góc nhìn
-3. **Ứng dụng chậm**: Giảm độ phân giải camera hoặc tăng thời gian giữa các lần nhận diện
-
-### Debug
-
-Bật debug mode để xem log chi tiết:
-
-```dart
-print('[Debug face] Size : ${faces.length}');
-print('[Local Recognition] Recognized: ${person.name}');
-```
-
-## 📈 Roadmap
-
-- [ ] Cải thiện thuật toán so sánh khuôn mặt
-- [ ] Thêm tính năng backup/restore dữ liệu
-- [ ] Hỗ trợ nhận diện khuôn mặt với khẩu trang
-- [ ] Tích hợp với hệ thống điểm danh
-- [ ] Thêm tính năng lịch sử nhận diện
-
-## 🤝 Đóng góp
-
-Mọi đóng góp đều được chào đón! Vui lòng:
-
-1. Fork project
-2. Tạo feature branch
-3. Commit changes
-4. Push to branch
-5. Tạo Pull Request
-
-## 📄 License
-
-MIT License - xem file LICENSE để biết thêm chi tiết.
-
----
-
-**Lưu ý**: Hệ thống này hoạt động hoàn toàn offline và không gửi dữ liệu cá nhân lên bất kỳ server nào. Tất cả dữ liệu được lưu trữ an toàn trên thiết bị của bạn.
+- [ ] Tích hợp API server cho nhận diện từ xa
+- [ ] Lưu trữ local database cho khuôn mặt đã đăng ký
+- [ ] Cải thiện accuracy với deep learning models
+- [ ] Thêm tính năng liveness detection
+- [ ] Support cho multiple camera angles
