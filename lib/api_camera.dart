@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:camera/camera.dart';
@@ -41,20 +42,11 @@ Future<void> processImage(List<Object> args) async {
             final int sensorOrientation = message[1];
             final SendPort sendMsg = message[2];
 
-            if (image.planes.length < 3) {
-              app_config.printLog(
-                'e',
-                '[Error Camera] CameraImage does not have 3 planes!',
-              );
-              continue;
-            }
-            if (image.format.group != ImageFormatGroup.yuv420) {
-              app_config.printLog(
-                'e',
-                '[Error Camera] CameraImage format is not yuv420!',
-              );
-              continue;
-            }
+            // Debug log
+            app_config.printLog(
+              'i',
+              'Image format: ${image.format.group}, planes: ${image.planes.length}',
+            );
 
             InputImageRotation rotation;
             switch (sensorOrientation) {
@@ -74,29 +66,79 @@ Future<void> processImage(List<Object> args) async {
                 rotation = InputImageRotation.rotation0deg;
             }
 
-            Uint8List nv21Bytes = convertYUV420ToNV21Safe(image);
-            InputImage inputImage = InputImage.fromBytes(
-              bytes: nv21Bytes,
-              metadata: InputImageMetadata(
-                size: Size(image.width.toDouble(), image.height.toDouble()),
-                format: InputImageFormat.nv21,
-                bytesPerRow: image.planes[0].bytesPerRow,
-                rotation: rotation,
-              ),
-            );
+            // Xác định định dạng ảnh đầu vào
+            final InputImageFormat? inputImageFormat =
+                InputImageFormatValue.fromRawValue(image.format.raw);
+            if (inputImageFormat == null) {
+              app_config.printLog(
+                'e',
+                '[Error Camera] Unknown raw format: ${image.format.raw}',
+              );
+              continue;
+            }
 
-            List<Face> faces = await faceDetector.processImage(inputImage);
-            app_config.printLog(
-              'i',
-              '[Debug camera] faces : [32m${faces.length}',
-            );
-            imglib.Image img = decodeNV21(inputImage);
-            sendMsg.send([
-              faces,
-              img,
-              inputImage.metadata!.size,
-              inputImage.metadata!.rotation,
-            ]);
+            // Xử lý Android - YUV420/NV21
+            if (Platform.isAndroid &&
+                image.format.group == ImageFormatGroup.yuv420) {
+              if (image.planes.length < 3) {
+                app_config.printLog(
+                  'e',
+                  '[Error Camera] YUV420 image does not have 3 planes!',
+                );
+                continue;
+              }
+
+              final Uint8List nv21Bytes = convertYUV420ToNV21Safe(image);
+
+              final inputImage = InputImage.fromBytes(
+                bytes: nv21Bytes,
+                metadata: InputImageMetadata(
+                  size: Size(image.width.toDouble(), image.height.toDouble()),
+                  format: InputImageFormat.nv21,
+                  bytesPerRow: image.planes[0].bytesPerRow,
+                  rotation: rotation,
+                ),
+              );
+
+              final faces = await faceDetector.processImage(inputImage);
+              final img = decodeNV21(inputImage);
+              sendMsg.send([
+                faces,
+                img,
+                inputImage.metadata!.size,
+                inputImage.metadata!.rotation,
+              ]);
+            }
+            // Xử lý iOS - BGRA8888 (1 plane)
+            else if (Platform.isIOS &&
+                image.format.group == ImageFormatGroup.bgra8888) {
+              if (image.planes.length != 1) {
+                app_config.printLog(
+                  'e',
+                  '[Error Camera] BGRA8888 image does not have 1 plane!',
+                );
+                continue;
+              }
+
+              final inputImage = InputImage.fromBytes(
+                bytes: image.planes[0].bytes,
+                metadata: InputImageMetadata(
+                  size: Size(image.width.toDouble(), image.height.toDouble()),
+                  format: InputImageFormat.bgra8888,
+                  bytesPerRow: image.planes[0].bytesPerRow,
+                  rotation: rotation,
+                ),
+              );
+
+              final faces = await faceDetector.processImage(inputImage);
+              final img = convertBGRA8888(image);
+              sendMsg.send([
+                faces,
+                img,
+                inputImage.metadata!.size,
+                inputImage.metadata!.rotation,
+              ]);
+            }
           }
         } else {
           app_config.printLog('e', '[Isolate] message format invalid!');
@@ -108,6 +150,16 @@ Future<void> processImage(List<Object> args) async {
   } catch (e) {
     app_config.printLog('e', '[Error Camera] $e');
   }
+}
+
+imglib.Image convertBGRA8888(CameraImage image) {
+  return imglib.Image.fromBytes(
+    width: image.width,
+    height: image.height,
+    bytes: image.planes[0].bytes.buffer,
+    order: imglib.ChannelOrder.bgra,
+    numChannels: 4,
+  );
 }
 
 Uint8List convertYUV420ToNV21Safe(CameraImage image) {
@@ -211,7 +263,6 @@ class APICamera {
 
   CameraController? get cameraController => _controller;
 
-
   APICamera(CameraLensDirection direction) {
     _initialDirection = direction;
   }
@@ -244,7 +295,7 @@ class APICamera {
               final imglib.Image img = message[1];
               final Size size = message[2];
               final InputImageRotation rotation = message[3];
-              app_config.printLog('i', '[Debug] size : [32m${faces.length}');
+              app_config.printLog('i', '[Debug] size : ${faces.length}');
               streamDectectFaceController.sink.add([
                 faces,
                 img,
@@ -294,9 +345,12 @@ class APICamera {
           }
           _controller = CameraController(
             _cameras[_camera_index],
-            ResolutionPreset.medium,
+            ResolutionPreset.low,
             enableAudio: false,
-            imageFormatGroup: ImageFormatGroup.yuv420,
+            imageFormatGroup:
+                Platform.isAndroid
+                    ? ImageFormatGroup.yuv420
+                    : ImageFormatGroup.bgra8888,
           );
           if (_controller != null) {
             try {
@@ -369,17 +423,37 @@ class APICamera {
   }
 
   Future<void> stop() async {
+    app_config.printLog('i', '[Debug face] : APICamera: stop() called');
     if (_run == true) {
       try {
         if (_controller != null) {
+          app_config.printLog(
+            'i',
+            '[Debug face] : APICamera: stopping image stream and disposing controller',
+          );
           await _controller!.stopImageStream();
           await _controller!.dispose();
           _controller = null;
           _run = false;
+          app_config.printLog(
+            'i',
+            '[Debug face] : APICamera: stop() completed successfully',
+          );
+        } else {
+          app_config.printLog(
+            'i',
+            '[Debug face] : APICamera: stop() - controller was null',
+          );
         }
       } catch (e) {
         app_config.printLog('i', '[Debug] : $e');
+        app_config.printLog('i', '[Debug face] : APICamera: stop() error: $e');
       }
+    } else {
+      app_config.printLog(
+        'i',
+        '[Debug face] : APICamera: stop() - camera was not running (_run = false)',
+      );
     }
   }
 
@@ -435,16 +509,7 @@ class APICamera {
     return image;
   }
 
-  imglib.Image convertBGRA8888(CameraImage image) {
-    return imglib.Image.fromBytes(
-      width: image.width,
-      height: image.height,
-      bytes: image.planes[0].bytes.buffer,
-    );
-  }
-
   Uint8List convertJPG(imglib.Image image) {
     return Uint8List.fromList(imglib.encodeJpg(image, quality: 90));
   }
-
 }

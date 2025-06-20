@@ -393,9 +393,16 @@ class APIFace {
   }
 
   void stop() {
+    print('APIFace: stop() called');
+    app_config.printLog('i', '[Debug face] : stop() called');
     if (camera.state() == true) {
       camera.stop();
       persons.clear();
+      print('APIFace: stop() completed - camera stopped and persons cleared');
+      app_config.printLog('i', '[Debug face] : stop() completed - camera stopped and persons cleared');
+    } else {
+      print('APIFace: stop() - camera was not running');
+      app_config.printLog('i', '[Debug face] : stop() - camera was not running');
     }
   }
 

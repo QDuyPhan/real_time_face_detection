@@ -23,14 +23,11 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => FaceDetectController(),
-      child: MaterialApp(
-        title: 'Face Detection',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
-        home: const HomeScreen(),
-      ),
+    return MaterialApp(
+      title: 'Face Detection',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+      home: const HomeScreen(),
     );
   }
 }

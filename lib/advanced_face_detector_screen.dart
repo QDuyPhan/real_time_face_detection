@@ -1,8 +1,10 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:real_time_face_detection/app_config.dart';
 
 import 'face_detect_controller.dart';
+import 'api_face.dart';
 
 class AdvancedFaceDetectorScreen extends StatefulWidget {
   const AdvancedFaceDetectorScreen({super.key});
@@ -17,18 +19,24 @@ class _AdvancedFaceDetectorScreenState
   @override
   void initState() {
     super.initState();
-    context.read<FaceDetectController>().init();
+    // Use post-frame callback to ensure widget is properly mounted
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<FaceDetectController>().init();
+    });
   }
 
   @override
   void dispose() {
-    context.read<FaceDetectController>().stop();
+    app_config.printLog(
+      'i',
+      '[Debug face] : AdvancedFaceDetectorScreen: dispose() called',
+    );
+    context.read<FaceDetectController>().stopDetection();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final watchState = context.watch<FaceDetectController>();
     return Scaffold(
       appBar: AppBar(
         title: const Text('Advanced Face Detection'),
@@ -45,10 +53,11 @@ class _AdvancedFaceDetectorScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Consumer<FaceDetectController>(
-                  builder: (context, provider, child) {
+                Selector<FaceDetectController, String>(
+                  selector: (context, controller) => controller.statusText,
+                  builder: (context, statusText, child) {
                     return Text(
-                      'Status: ${provider.statusText}',
+                      'Status: $statusText',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -57,24 +66,26 @@ class _AdvancedFaceDetectorScreenState
                   },
                 ),
                 const SizedBox(height: 8),
-                Consumer<FaceDetectController>(
-                  builder: (context, provider, child) {
+                Selector<FaceDetectController, bool>(
+                  selector:
+                      (context, controller) =>
+                          controller.controller?.value.isInitialized == true,
+                  builder: (context, isInitialized, child) {
                     return Text(
-                      'Camera: ${provider.controller?.value.isInitialized == true ? "Running" : "Stopped"}',
+                      'Camera: ${isInitialized ? "Running" : "Stopped"}',
                       style: TextStyle(
                         fontSize: 14,
-                        color:
-                            provider.controller?.value.isInitialized == true
-                                ? Colors.green
-                                : Colors.red,
+                        color: isInitialized ? Colors.green : Colors.red,
                       ),
                     );
                   },
                 ),
-                Consumer<FaceDetectController>(
-                  builder: (context, provider, child) {
+                Selector<FaceDetectController, int>(
+                  selector:
+                      (context, controller) => controller.currentFaces.length,
+                  builder: (context, faceCount, child) {
                     return Text(
-                      'Faces detected: ${provider.currentFaces.length}',
+                      'Faces detected: $faceCount',
                       style: const TextStyle(fontSize: 14),
                     );
                   },
@@ -89,29 +100,45 @@ class _AdvancedFaceDetectorScreenState
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                ElevatedButton.icon(
-                  onPressed:
-                      watchState.isInitialized
-                          ? watchState.startDetection
-                          : null,
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Start'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                  ),
+                Selector<FaceDetectController, bool>(
+                  selector: (context, controller) => controller.isInitialized,
+                  builder: (context, isInitialized, child) {
+                    return ElevatedButton.icon(
+                      onPressed:
+                          isInitialized
+                              ? () =>
+                                  context
+                                      .read<FaceDetectController>()
+                                      .startDetection()
+                              : null,
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Start'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
+                    );
+                  },
                 ),
-                ElevatedButton.icon(
-                  onPressed:
-                      watchState.isInitialized
-                          ? watchState.stopDetection
-                          : null,
-                  icon: const Icon(Icons.stop),
-                  label: const Text('Stop'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                  ),
+                Selector<FaceDetectController, bool>(
+                  selector: (context, controller) => controller.isInitialized,
+                  builder: (context, isInitialized, child) {
+                    return ElevatedButton.icon(
+                      onPressed:
+                          isInitialized
+                              ? () =>
+                                  context
+                                      .read<FaceDetectController>()
+                                      .stopDetection()
+                              : null,
+                      icon: const Icon(Icons.stop),
+                      label: const Text('Stop'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -128,8 +155,12 @@ class _AdvancedFaceDetectorScreenState
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child:
-                    watchState.controller?.value.isInitialized == true
+                child: Selector<FaceDetectController, bool>(
+                  selector:
+                      (context, controller) =>
+                          controller.controller?.value.isInitialized == true,
+                  builder: (context, isInitialized, child) {
+                    return isInitialized
                         ? _buildCameraPreview()
                         : Container(
                           color: Colors.grey[200],
@@ -153,7 +184,9 @@ class _AdvancedFaceDetectorScreenState
                               ],
                             ),
                           ),
-                        ),
+                        );
+                  },
+                ),
               ),
             ),
           ),
@@ -161,8 +194,10 @@ class _AdvancedFaceDetectorScreenState
           // Detected persons list
           Expanded(
             flex: 1,
-            child:
-                watchState.detectedPersons.isEmpty
+            child: Selector<FaceDetectController, List<InfoPerson>>(
+              selector: (context, controller) => controller.detectedPersons,
+              builder: (context, detectedPersons, child) {
+                return detectedPersons.isEmpty
                     ? const Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -197,127 +232,114 @@ class _AdvancedFaceDetectorScreenState
                               children: [
                                 const Icon(Icons.people, color: Colors.blue),
                                 const SizedBox(width: 8),
-                                Consumer<FaceDetectController>(
-                                  builder: (context, provider, child) {
-                                    return Text(
-                                      'Detected Persons (${provider.detectedPersons.length})',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.blue,
-                                      ),
-                                    );
-                                  },
+                                Text(
+                                  'Detected Persons (${detectedPersons.length})',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                          Consumer<FaceDetectController>(
-                            builder: (context, provider, child) {
-                              return Expanded(
-                                child: ListView.builder(
-                                  padding: const EdgeInsets.all(8),
-                                  itemCount: provider.detectedPersons.length,
-                                  itemBuilder: (context, index) {
-                                    final person =
-                                        provider.detectedPersons[index];
-                                    return Card(
-                                      margin: const EdgeInsets.only(bottom: 8),
-                                      child: ListTile(
-                                        leading:
-                                            person.image.isNotEmpty
-                                                ? Container(
-                                                  width: 50,
-                                                  height: 50,
-                                                  decoration: BoxDecoration(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          8,
-                                                        ),
-                                                    border: Border.all(
-                                                      color: Colors.grey[300]!,
-                                                    ),
-                                                  ),
-                                                  child: ClipRRect(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          8,
-                                                        ),
-                                                    child: Image.memory(
-                                                      person.image,
-                                                      fit: BoxFit.cover,
-                                                    ),
-                                                  ),
-                                                )
-                                                : Container(
-                                                  width: 50,
-                                                  height: 50,
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.grey[300],
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          8,
-                                                        ),
-                                                  ),
-                                                  child: const Icon(
-                                                    Icons.face,
-                                                    color: Colors.grey,
-                                                  ),
-                                                ),
-                                        title: Text(
-                                          'Face ID: ${person.faceId}',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        subtitle: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Position: (${person.x.toStringAsFixed(1)}, ${person.y.toStringAsFixed(1)})',
-                                            ),
-                                            Text(
-                                              'Size: ${person.w.toStringAsFixed(1)} x ${person.h.toStringAsFixed(1)}',
-                                            ),
-                                            if (person.name.isNotEmpty)
-                                              Text(
-                                                'Name: ${person.name}',
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.blue,
+                          Expanded(
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(8),
+                              itemCount: detectedPersons.length,
+                              itemBuilder: (context, index) {
+                                final person = detectedPersons[index];
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: ListTile(
+                                    leading:
+                                        person.image.isNotEmpty
+                                            ? Container(
+                                              width: 50,
+                                              height: 50,
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: Colors.grey[300]!,
                                                 ),
                                               ),
-                                            if (person.phone.isNotEmpty)
-                                              Text(
-                                                'Phone: ${person.phone}',
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.green,
+                                              child: ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                child: Image.memory(
+                                                  person.image,
+                                                  fit: BoxFit.cover,
                                                 ),
                                               ),
-                                          ],
-                                        ),
-                                        trailing: Container(
-                                          width: 12,
-                                          height: 12,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color:
-                                                person.busy
-                                                    ? Colors.orange
-                                                    : Colors.green,
-                                          ),
-                                        ),
+                                            )
+                                            : Container(
+                                              width: 50,
+                                              height: 50,
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey[300],
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(
+                                                Icons.face,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                    title: Text(
+                                      'Face ID: ${person.faceId}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
                                       ),
-                                    );
-                                  },
-                                ),
-                              );
-                            },
+                                    ),
+                                    subtitle: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Position: (${person.x.toStringAsFixed(1)}, ${person.y.toStringAsFixed(1)})',
+                                        ),
+                                        Text(
+                                          'Size: ${person.w.toStringAsFixed(1)} x ${person.h.toStringAsFixed(1)}',
+                                        ),
+                                        if (person.name.isNotEmpty)
+                                          Text(
+                                            'Name: ${person.name}',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.blue,
+                                            ),
+                                          ),
+                                        if (person.phone.isNotEmpty)
+                                          Text(
+                                            'Phone: ${person.phone}',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.green,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    trailing: Container(
+                                      width: 12,
+                                      height: 12,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color:
+                                            person.busy
+                                                ? Colors.orange
+                                                : Colors.green,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                         ],
                       ),
-                    ),
+                    );
+              },
+            ),
           ),
         ],
       ),
@@ -325,23 +347,38 @@ class _AdvancedFaceDetectorScreenState
   }
 
   Widget _buildCameraPreview() {
-    final watchState = context.watch<FaceDetectController>();
-    final size = MediaQuery.of(context).size;
-    var scale = size.aspectRatio * watchState.controller!.value.aspectRatio;
-    if (scale < 1) scale = 1 / scale;
-
-    return Container(
-      color: Colors.black,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Transform.scale(
-            scale: scale,
-            child: Center(child: CameraPreview(watchState.controller!)),
+    return Selector<FaceDetectController, (CameraController?, CustomPaint?)>(
+      selector:
+          (context, controller) => (
+            controller.controller,
+            controller.customPaint,
           ),
-          if (watchState.customPaint != null) watchState.customPaint!,
-        ],
-      ),
+      builder: (context, data, child) {
+        final cameraController = data.$1;
+        final customPaint = data.$2;
+
+        if (cameraController == null) {
+          return Container(color: Colors.black);
+        }
+
+        final size = MediaQuery.of(context).size;
+        var scale = size.aspectRatio * cameraController.value.aspectRatio;
+        if (scale < 1) scale = 1 / scale;
+
+        return Container(
+          color: Colors.black,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Transform.scale(
+                scale: scale,
+                child: Center(child: CameraPreview(cameraController)),
+              ),
+              if (customPaint != null) customPaint,
+            ],
+          ),
+        );
+      },
     );
   }
 }

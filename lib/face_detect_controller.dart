@@ -4,6 +4,7 @@ import 'dart:ui' as imglib;
 import 'package:camera/camera.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:real_time_face_detection/app_config.dart';
 
 import 'api_face.dart';
 import 'face_detector_painter.dart';
@@ -42,16 +43,22 @@ class FaceDetectController extends ChangeNotifier {
 
   Future<void> init() async {
     try {
+      _statusText = 'Initializing...';
+      notifyListeners();
+
       _apiFace.init(rootIsolateToken!);
       _apiFace.streamPersonController.stream.listen((persons) {
         _detectedPersons = persons;
         _statusText = 'Detected ${persons.length} person(s)';
+        notifyListeners();
       });
+
       _isInitialized = true;
       _statusText = 'Ready - Tap to start detection';
       notifyListeners();
     } catch (e) {
       _statusText = 'Error: $e';
+      _isInitialized = false;
       notifyListeners();
     }
   }
@@ -75,6 +82,7 @@ class FaceDetectController extends ChangeNotifier {
           _customPaint = CustomPaint(
             painter: FaceDetectorPainter(faces, size, rotation),
           );
+          notifyListeners();
         }
       }
     });
@@ -119,8 +127,31 @@ class FaceDetectController extends ChangeNotifier {
   }
 
   void stop() {
+    app_config.printLog(
+      'i',
+      '[Debug face] : FaceDetectController: stop() called',
+    );
     _apiFace.stop();
     _faceStreamSub?.cancel();
+    _faceStreamSub = null;
+    _customPaint = null;
+    _currentFaces = [];
+    _imageSize = Size.zero;
+    _rotation = InputImageRotation.rotation0deg;
+    app_config.printLog(
+      'i',
+      '[Debug face] : FaceDetectController: stop() completed',
+    );
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    app_config.printLog(
+      'i',
+      '[Debug face] : FaceDetectController: dispose() called',
+    );
+    stop();
+    super.dispose();
   }
 }
