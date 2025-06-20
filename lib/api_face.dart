@@ -338,7 +338,8 @@ class APIFace {
             for (int i = 0; i < persons.length; i++) {
               int tmp = m_time - persons[i].lastest;
               if (tmp > 1000) {
-                persons.removeAt(i);
+                // persons.removeAt(i);
+                persons.removeWhere((p) => DateTime.now().millisecondsSinceEpoch - p.lastest > 1000);
                 i--;
               }
             }
