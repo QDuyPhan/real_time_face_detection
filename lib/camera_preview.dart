@@ -329,26 +329,6 @@ class _CamerapreviewState extends State<Camerapreview> {
             ),
           ),
           if (widget.customPaint != null) widget.customPaint!,
-          // Positioned(
-          //   bottom: 100,
-          //   left: 50,
-          //   right: 50,
-          //   child: Slider(
-          //     value: zoomLevel,
-          //     min: minZoomLevel,
-          //     max: maxZoomLevel,
-          //     onChanged: (value) {
-          //       setState(() {
-          //         zoomLevel = value;
-          //         _controller?.setZoomLevel(zoomLevel);
-          //       });
-          //     },
-          //     divisions:
-          //         (maxZoomLevel - 1).toInt() < 1
-          //             ? null
-          //             : (maxZoomLevel - 1).toInt(),
-          //   ),
-          // ),
         ],
       ),
     );

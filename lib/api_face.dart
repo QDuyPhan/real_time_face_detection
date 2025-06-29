@@ -338,8 +338,7 @@ class APIFace {
             for (int i = 0; i < persons.length; i++) {
               int tmp = m_time - persons[i].lastest;
               if (tmp > 1000) {
-                // persons.removeAt(i);
-                persons.removeWhere((p) => DateTime.now().millisecondsSinceEpoch - p.lastest > 1000);
+                persons.removeAt(i);
                 i--;
               }
             }
@@ -394,16 +393,19 @@ class APIFace {
   }
 
   void stop() {
-    print('APIFace: stop() called');
     app_config.printLog('i', '[Debug face] : stop() called');
     if (camera.state() == true) {
       camera.stop();
       persons.clear();
-      print('APIFace: stop() completed - camera stopped and persons cleared');
-      app_config.printLog('i', '[Debug face] : stop() completed - camera stopped and persons cleared');
+      app_config.printLog(
+        'i',
+        '[Debug face] : stop() completed - camera stopped and persons cleared',
+      );
     } else {
-      print('APIFace: stop() - camera was not running');
-      app_config.printLog('i', '[Debug face] : stop() - camera was not running');
+      app_config.printLog(
+        'i',
+        '[Debug face] : stop() - camera was not running',
+      );
     }
   }
 
