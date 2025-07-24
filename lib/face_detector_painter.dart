@@ -13,6 +13,11 @@ class FaceDetectorPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Log debug xác nhận hàm paint được gọi và số lượng faces
+    // ignore: avoid_print
+    print(
+      '[BoundingBox Debug] paint called, faces: \\${faces.length}, canvas size: \\${size.width}x\\${size.height}, image size: \\${absoluteImageSize.width}x\\${absoluteImageSize.height}',
+    );
     final Paint paint =
         Paint()
           ..style = PaintingStyle.stroke
@@ -20,6 +25,7 @@ class FaceDetectorPainter extends CustomPainter {
           ..color = Colors.blue;
 
     for (final Face face in faces) {
+      // Vẽ bounding box sử dụng translateX/translateY đã sửa để đảm bảo đúng vị trí
       canvas.drawRect(
         Rect.fromLTRB(
           translateX(face.boundingBox.left, rotation, size, absoluteImageSize),

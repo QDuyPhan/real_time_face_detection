@@ -25,7 +25,9 @@ Future<void> processImage(List<Object> args) async {
       options: FaceDetectorOptions(
         enableContours: true,
         enableClassification: true,
+        enableLandmarks: true,
         enableTracking: true,
+        minFaceSize: 0.15,
         performanceMode: FaceDetectorMode.accurate,
       ),
     );

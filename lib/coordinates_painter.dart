@@ -1,7 +1,8 @@
-import 'dart:io';
 import 'dart:ui';
-
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+
+// Hàm chuyển đổi toạ độ X từ ảnh gốc sang canvas preview, xử lý đúng mọi rotation
+// Mục đích: Đảm bảo bounding box luôn đúng vị trí trên preview
 
 double translateX(
   double x,
@@ -29,6 +30,7 @@ double translateY(
 ) {
   switch (rotation) {
     case InputImageRotation.rotation90deg:
+      return size.height - y * size.height / absoluteImageSize.width;
     case InputImageRotation.rotation270deg:
       return y * size.height / absoluteImageSize.width;
     case InputImageRotation.rotation180deg:

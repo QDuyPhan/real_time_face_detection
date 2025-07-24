@@ -119,14 +119,18 @@ class APIFace {
           InputImageRotation rotation = event[3];
           app_config.printLog('i', '[Debug face] Size : ${faces.length}');
 
-          streamFaceController.sink.add([faces, img, size, rotation]);
-
           if (faces.length > 0) {
+            app_config.printLog(
+              'i',
+              '[BoundingBox Debug] APIFace: add faces=${faces.length}, size=${size.width}x${size.height}, rotation=$rotation',
+            );
+            streamFaceController.sink.add([faces, img, size, rotation]);
             for (int i = 0; i < faces.length; i++) {
               app_config.printLog(
                 'i',
                 '[Debug face] Info Face : $i - ${faces[i].trackingId}',
               );
+
               if (faces[i].trackingId != null) {
                 if (persons.length > 0) {
                   bool flag = false;
@@ -393,20 +397,23 @@ class APIFace {
   }
 
   void stop() {
-    app_config.printLog('i', '[Debug face] : stop() called');
+    app_config.printLog('i', '[Debug face] : APIFace: stop() called');
     if (camera.state() == true) {
       camera.stop();
       persons.clear();
       app_config.printLog(
         'i',
-        '[Debug face] : stop() completed - camera stopped and persons cleared',
+        '[Debug face] : APIFace: stop() completed - camera stopped and persons cleared',
       );
     } else {
       app_config.printLog(
         'i',
-        '[Debug face] : stop() - camera was not running',
+        '[Debug face] : APIFace: stop() - camera was not running',
       );
     }
+
+    // Đảm bảo xóa tất cả persons để tránh memory leak
+    persons.clear();
   }
 
   bool state() {

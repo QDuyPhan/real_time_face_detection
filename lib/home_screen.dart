@@ -26,39 +26,39 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // // Basic Face Detector Button
-            // SizedBox(
-            //   width: 350,
-            //   height: 80,
-            //   child: OutlinedButton(
-            //     onPressed: () {
-            //       Navigator.push(
-            //         context,
-            //         MaterialPageRoute(
-            //           builder: (context) => const FaceDetectorScreen(),
-            //         ),
-            //       );
-            //     },
-            //     style: ButtonStyle(
-            //       side: MaterialStateProperty.all(
-            //         BorderSide(
-            //           color: Colors.blue,
-            //           width: 1,
-            //           style: BorderStyle.solid,
-            //         ),
-            //       ),
-            //     ),
-            //     child: const Row(
-            //       mainAxisAlignment: MainAxisAlignment.center,
-            //       children: [
-            //         Icon(Icons.face, color: Colors.blue),
-            //         SizedBox(width: 8),
-            //         Text('Basic Face Detector', style: TextStyle(fontSize: 16)),
-            //       ],
-            //     ),
-            //   ),
-            // ),
+            SizedBox(
+              width: 350,
+              height: 80,
+              child: OutlinedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const FaceDetectorScreen(),
+                    ),
+                  );
+                },
+                style: ButtonStyle(
+                  side: MaterialStateProperty.all(
+                    BorderSide(
+                      color: Colors.blue,
+                      width: 1,
+                      style: BorderStyle.solid,
+                    ),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.face, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text('Basic Face Detector', style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
 
-            // const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
             // Advanced Face Detector Button
             SizedBox(
